@@ -1,16 +1,58 @@
-# This is a sample Python script.
+from enum import IntEnum, Enum
 
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
+import diskcache
+import requests
+from fastapi import FastAPI, Body, Query, HTTPException
+from pydantic import BaseModel
+
+app = FastAPI()
+cache = diskcache.Cache(".cache")
+
+ONE_DAY_SECONDS = 24 * 60 * 60
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
+class SearchType(IntEnum):
+    ALL_VENUES = 0
+    PUBS_ONLY = 1
+    HOTELS_ONLY = 2
 
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+class SearchRegion(Enum):
+    ENGLAND = "England"
+    WALES = "Wales"
+    NORTHERN_IRELAND = "N Ireland"
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+
+@cache.memoize(expire=ONE_DAY_SECONDS)
+def request_spoons_data(search_region, search_type):
+    return requests.post(
+        "https://www.jdwetherspoon.com/api/advancedsearch",
+        headers={
+            "accept": "application/json",
+            "content-type": "application/json;charset=UTF-8",
+        },
+        json={
+            "region": search_region.value,
+            "paging": {"UsePagination": False},
+            "facilities": [],
+            "searchType": search_type.value,
+        },
+    ).json()
+
+
+@app.get("/get_spoons_in_subregion")
+async def get_spoons_in_subregion(
+    search_region: SearchRegion = SearchRegion.ENGLAND,
+    search_type: SearchType = SearchType.ALL_VENUES,
+    search_subregion: str = "London",
+):
+    data = request_spoons_data(search_region, search_type)
+    for subregion in data["regions"][0]["subRegions"]:
+        if subregion["name"] == search_subregion:
+            return subregion
+    else:
+        raise HTTPException(status_code=404, detail="Subregion not found")
+
+
+if __name__ == "__main__":
+    pass
