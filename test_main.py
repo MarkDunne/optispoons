@@ -24,14 +24,16 @@ def test_optimal_spoons():
                     "name": "Lord Beckenham",
                     "start_point": "Beckenham Hill Rd, Beckenham BR3 1SY",
                     "end_point": "Beckenham Hill Rd, Beckenham BR3 1SY",
-                    "mode_of_transport": "bike",
+                    "travel_mode": "bicycling",
                 },
                 {
                     "name": "Lord Sutton",
                     "start_point": "High St, Sutton SM1 1JA",
                     "end_point": "High St, Sutton SM1 1JA",
-                    "mode_of_transport": "car",
+                    "travel_mode": "transit",
                 },
             ]
         },
     )
+
+    return response.ok
