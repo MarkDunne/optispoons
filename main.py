@@ -71,7 +71,7 @@ class SpoonsSubRegion(BaseModel):
     items: List[Spoons]
 
 
-@cache.memoize(expire=1)
+@cache.memoize(expire=ONE_DAY_SECONDS)
 def request_spoons_data(
     search_region, search_type, search_subregion
 ) -> SpoonsSubRegion:
@@ -102,6 +102,7 @@ def chunks(l, n):
         yield l[i : i + n]
 
 
+@cache.memoize(expire=ONE_DAY_SECONDS)
 def gmaps_matrix(origins=None, destinations=None, travel_mode="transit", **kwargs):
 
     if not xor(len(origins) > 1, len(destinations) > 1):
@@ -143,12 +144,10 @@ class OptiSpoonsRequest(BaseModel):
 
 
 def solve(attendees: List[Attendee], spoons: SpoonsSubRegion):
-    results = defaultdict(dict)
-    for attendee in attendees:
-        print(f"Calculating routes for {attendee.name}")
-        for pubs in chunks(spoons.items, 20):
-            pubs_locations = [pub.coord_string() for pub in pubs]
-
+    for pubs_chunk in chunks(spoons.items, 20):
+        pubs_locations = [pub.coord_string() for pub in pubs_chunk]
+        pub_result = dict()
+        for attendee in attendees:
             travel_times_to_pubs = gmaps_matrix(
                 origins=[attendee.start_point],
                 destinations=pubs_locations,
@@ -162,20 +161,28 @@ def solve(attendees: List[Attendee], spoons: SpoonsSubRegion):
                 departure_time=int((get_next_meeting_time() + datetime.timedelta(hours=2)).timestamp())
             )
 
-            for pub, tt_from, tt_to in zip(
-                pubs, travel_times_to_pubs, travel_times_from_pubs, strict=True
-            ):
-                results[pub][attendee.name] = tt_from + tt_to
-    return results
+            for tt_from, tt_to in zip(travel_times_to_pubs, travel_times_from_pubs, strict=True):
+                pub_result[attendee.name] = tt_from + tt_to
+        yield pub_result
 
 
 #
 @app.post("/calculate_optimal_spoons")
 def calculate_optimal_spoons(request: OptiSpoonsRequest):
-    return solve(
-        request.attendees,
-        request_spoons_data(SearchRegion.ENGLAND, SearchType.ALL_VENUES, "London"),
-    )
+
+    pubs = request_spoons_data(SearchRegion.ENGLAND, SearchType.ALL_VENUES, "London")
+
+    solution = solve(request.attendees, pubs)
+
+    def summarise_pub_results(pub_results):
+        return sum(value ** 2 for value in pub_results[1].values())
+
+    for pub, pub_result in solution.items():
+        pub.abc = sum(value ** 2 for value in pub_result.values())
+
+    solution = sorted(solution.items(), key=summarise_pub_results)
+
+    return solution
 
 
 @app.get("/get_spoons_in_subregion")
@@ -184,7 +191,7 @@ async def get_spoons_in_subregion(
     search_type: SearchType = SearchType.ALL_VENUES,
     search_subregion: str = "London",
 ) -> SpoonsSubRegion:
-    return request_spoons_data(
+    request_spoons_data(
         search_region.value, search_type.query_value, search_subregion
     )
 
