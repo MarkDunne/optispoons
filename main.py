@@ -52,7 +52,7 @@ class SearchRegion(str, Enum):
 
 @cache.memoize(expire=ONE_DAY_SECONDS)
 def request_spoons_data(
-    search_region, search_type, search_subregion
+        search_region, search_type, search_subregion
 ) -> SpoonsSubRegion:
     response = requests.post(
         "https://www.jdwetherspoon.com/api/advancedsearch",
@@ -78,7 +78,7 @@ def request_spoons_data(
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
     for i in range(0, len(l), n):
-        yield l[i : i + n]
+        yield l[i: i + n]
 
 
 # @cache.memoize(expire=ONE_DAY_SECONDS)
@@ -155,20 +155,18 @@ def solve(spoons: List[Spoons], attendees: List[Attendee]):
     for each pub and attendee, in order of pub
     """
 
-    attendee_groups = group_attendees_by_travel_mode(attendees)
     pub_chunk_travel_times = []
     for pubs_chunk in chunks(spoons, 20):
         attendee_group_travel_times = []
-        for travel_mode, attendees in attendee_groups:
-            attendees = list(attendees)
-            attendee_group_travel_times.append(
-                round_trip_travel_time(
-                    [attendee.start_point for attendee in attendees],
-                    [pub.coord_string() for pub in pubs_chunk],
-                    [attendee.end_point for attendee in attendees],
-                    travel_mode,
-                )
+        for travel_mode, grouped_attendees in group_attendees_by_travel_mode(attendees):
+            grouped_attendees = list(grouped_attendees)
+            travel_times = round_trip_travel_time(
+                [attendee.start_point for attendee in grouped_attendees],
+                [pub.coord_string() for pub in pubs_chunk],
+                [attendee.end_point for attendee in grouped_attendees],
+                travel_mode,
             )
+            attendee_group_travel_times.append(travel_times)
         pub_chunk_travel_times.append(np.hstack(attendee_group_travel_times))
     return np.vstack(pub_chunk_travel_times)
 
@@ -177,24 +175,17 @@ def solve(spoons: List[Spoons], attendees: List[Attendee]):
 def calculate_optimal_spoons(request: OptiSpoonsRequest):
     pubs = request_spoons_data(SearchRegion.ENGLAND, SearchType.ALL_VENUES, "London")
 
-    solution = list(solve(pubs.items, request.attendees))
+    solution = solve(pubs.items, request.attendees)
+    pub_scores = (solution ** 2).sum(axis=1)
 
-    def summarise_pub_results(pub_results):
-        return sum(value**2 for value in pub_results[1].values())
-
-    for pub, pub_result in solution.items():
-        pub.abc = sum(value**2 for value in pub_result.values())
-
-    solution = sorted(solution.items(), key=summarise_pub_results)
-
-    return solution
+    return pubs.items[pub_scores.argmin()]
 
 
 @app.get("/get_spoons_in_subregion")
 async def get_spoons_in_subregion(
-    search_region: SearchRegion = SearchRegion.ENGLAND,
-    search_type: SearchType = SearchType.ALL_VENUES,
-    search_subregion: str = "London",
+        search_region: SearchRegion = SearchRegion.ENGLAND,
+        search_type: SearchType = SearchType.ALL_VENUES,
+        search_subregion: str = "London",
 ) -> SpoonsSubRegion:
     return request_spoons_data(
         search_region.value, search_type.query_value, search_subregion

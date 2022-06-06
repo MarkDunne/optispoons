@@ -1,5 +1,26 @@
-from main import gmaps_matrix, solve
-from models import Spoons, SpoonsSubRegion, Attendee, TravelMode
+from main import gmaps_matrix, solve, group_attendees_by_travel_mode
+from models import Spoons, Attendee, TravelMode
+
+attendees = [
+    Attendee(
+        name="Lizz",
+        start_point="London SW1A 1AA",
+        end_point="London SW1A 1AA",
+        travel_mode=TravelMode.TRANSIT,
+    ),
+    Attendee(
+        name="Lord Beckenham",
+        start_point="Beckenham Hill Rd, Beckenham BR3 1SY",
+        end_point="Beckenham Hill Rd, Beckenham BR3 1SY",
+        travel_mode=TravelMode.CYCLING,
+    ),
+    Attendee(
+        name="Lord Sutton",
+        start_point="High St, Sutton SM1 1JA",
+        end_point="High St, Sutton SM1 1JA",
+        travel_mode=TravelMode.TRANSIT,
+    ),
+]
 
 
 def test_gmaps_matrix():
@@ -46,27 +67,12 @@ def test_solve():
         ),
     ]
 
-    attendees = [
-        Attendee(
-            name="Lizz",
-            start_point="London SW1A 1AA",
-            end_point="London SW1A 1AA",
-            travel_mode=TravelMode.TRANSIT,
-        ),
-        Attendee(
-            name="Lord Beckenham",
-            start_point="Beckenham Hill Rd, Beckenham BR3 1SY",
-            end_point="Beckenham Hill Rd, Beckenham BR3 1SY",
-            travel_mode=TravelMode.CYCLING,
-        ),
-        Attendee(
-            name="Lord Sutton",
-            start_point="High St, Sutton SM1 1JA",
-            end_point="High St, Sutton SM1 1JA",
-            travel_mode=TravelMode.TRANSIT,
-        ),
-    ]
-
     result = solve(spoons, attendees)
 
     assert result.shape == (len(spoons), len(attendees))
+
+
+def test_group_attendees():
+    attendee_groups = group_attendees_by_travel_mode(attendees)
+    for travel_mode, grouped_attendees in attendee_groups:
+        assert len(list(grouped_attendees)) > 0
