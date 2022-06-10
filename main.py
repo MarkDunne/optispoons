@@ -1,10 +1,10 @@
 import datetime
 from datetime import datetime as datetime_type
 from enum import Enum
-from itertools import groupby
+from itertools import groupby, product
 from operator import xor, itemgetter
 import numpy as np
-from typing import List
+from typing import List, Iterator
 
 import diskcache
 import requests
@@ -13,7 +13,7 @@ from pydantic import BaseModel, BaseSettings, Field
 
 # TODO use an LRU cache here
 #  See https://fastapi.tiangolo.com/advanced/settings/
-from models import GmapsMatrixResponse, Attendee, SpoonsSubRegion, Spoons
+from models import GmapsMatrixResponse, Attendee, SpoonsSubRegion, Spoons, TravelMode
 
 
 class Settings(BaseSettings):
@@ -52,7 +52,7 @@ class SearchRegion(str, Enum):
 
 @cache.memoize(expire=ONE_DAY_SECONDS)
 def request_spoons_data(
-        search_region, search_type, search_subregion
+    search_region, search_type, search_subregion
 ) -> SpoonsSubRegion:
     response = requests.post(
         "https://www.jdwetherspoon.com/api/advancedsearch",
@@ -78,7 +78,7 @@ def request_spoons_data(
 def chunks(l, n):
     """Yield successive n-sized chunks from l."""
     for i in range(0, len(l), n):
-        yield l[i: i + n]
+        yield l[i : i + n]
 
 
 # @cache.memoize(expire=ONE_DAY_SECONDS)
@@ -126,7 +126,8 @@ class OptiSpoonsRequest(BaseModel):
 
 def group_attendees_by_travel_mode(attendees):
     key_func = lambda attendee: attendee.travel_mode.value
-    return groupby(sorted(attendees, key=key_func), key=key_func)
+    iterable_result = groupby(sorted(attendees, key=key_func), key=key_func)
+    return [(mode, list(attendees)) for (mode, attendees) in iterable_result]
 
 
 def round_trip_travel_time(start_points, mid_points, end_points, travel_mode):
@@ -155,15 +156,17 @@ def solve(spoons: List[Spoons], attendees: List[Attendee]):
     for each pub and attendee, in order of pub
     """
 
+    # Todo can I do a product of pubs vs attendees groups?
+
+    attendee_groups = group_attendees_by_travel_mode(attendees)
     pub_chunk_travel_times = []
     for pubs_chunk in chunks(spoons, 20):
         attendee_group_travel_times = []
-        for travel_mode, grouped_attendees in group_attendees_by_travel_mode(attendees):
-            grouped_attendees = list(grouped_attendees)
+        for travel_mode, attendees_group in attendee_groups:
             travel_times = round_trip_travel_time(
-                [attendee.start_point for attendee in grouped_attendees],
+                [attendee.start_point for attendee in attendees_group],
                 [pub.coord_string() for pub in pubs_chunk],
-                [attendee.end_point for attendee in grouped_attendees],
+                [attendee.end_point for attendee in attendees_group],
                 travel_mode,
             )
             attendee_group_travel_times.append(travel_times)
@@ -176,16 +179,16 @@ def calculate_optimal_spoons(request: OptiSpoonsRequest):
     pubs = request_spoons_data(SearchRegion.ENGLAND, SearchType.ALL_VENUES, "London")
 
     solution = solve(pubs.items, request.attendees)
-    pub_scores = (solution ** 2).sum(axis=1)
+    pub_scores = (solution**2).sum(axis=1)
 
     return pubs.items[pub_scores.argmin()]
 
 
 @app.get("/get_spoons_in_subregion")
 async def get_spoons_in_subregion(
-        search_region: SearchRegion = SearchRegion.ENGLAND,
-        search_type: SearchType = SearchType.ALL_VENUES,
-        search_subregion: str = "London",
+    search_region: SearchRegion = SearchRegion.ENGLAND,
+    search_type: SearchType = SearchType.ALL_VENUES,
+    search_subregion: str = "London",
 ) -> SpoonsSubRegion:
     return request_spoons_data(
         search_region.value, search_type.query_value, search_subregion
