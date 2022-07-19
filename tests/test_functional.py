@@ -31,7 +31,10 @@ def test_optimal_spoons():
                     "end_point": "High St, Sutton SM1 1JA",
                     "travel_mode": "transit",
                 },
-            ]
+            ],
+            "search_region": "Wales",
+            "search_subregion": "Cardiff",
+            "meeting_datetime": "2022-07-25T19:00:00"
         },
     )
 

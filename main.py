@@ -97,7 +97,7 @@ def gmaps_matrix(origins=None, destinations=None, travel_mode="transit", **kwarg
     )
 
 
-def get_next_meeting_time():
+def get_next_meeting_time() -> datetime_type:
     # Todo parameterize default day and time
     days = 0 - datetime.datetime.today().weekday() + 7
     return datetime.datetime.combine(
@@ -109,17 +109,28 @@ def get_next_meeting_time():
 # Todo add region option to this
 class OptiSpoonsRequest(BaseModel):
     attendees: List[Attendee]
-    datetime: datetime_type = get_next_meeting_time()
+    search_region: SearchRegion = SearchRegion.ENGLAND
+    search_subregion: str = "London"
+    meeting_datetime: datetime_type = get_next_meeting_time()
+
+
+class OptiSpoonsResponse(BaseModel):
+    search_region: SearchRegion
+    meeting_time: datetime_type
+    optimal_spoons: Spoons
+    pub_scores: List[Spoons]
 
 
 def group_attendees_by_travel_mode(attendees):
-    key_func = lambda attendee: attendee.travel_mode.value
+    def key_func(attendee: Attendee):
+        return attendee.travel_mode.value
+
     iterable_result = groupby(sorted(attendees, key=key_func), key=key_func)
     return [(mode, list(attendees)) for (mode, attendees) in iterable_result]
 
 
 def round_trip_travel_times_for_travel_mode(
-    start_points, mid_points, end_points, travel_mode
+    start_points, mid_points, end_points, travel_mode, meeting_time: datetime
 ):
     """
     Return results by midpoint
@@ -130,22 +141,22 @@ def round_trip_travel_times_for_travel_mode(
         origins=start_points,
         destinations=mid_points,
         travel_mode=travel_mode,
-        arrival_time=int(get_next_meeting_time().timestamp()),
+        arrival_time=int(meeting_time.timestamp()),
     )
 
     travel_times_from_pubs = gmaps_matrix(
         origins=mid_points,
         destinations=end_points,
         travel_mode=travel_mode,
-        departure_time=int(
-            (get_next_meeting_time() + datetime.timedelta(hours=2)).timestamp()
-        ),
+        departure_time=int((meeting_time + datetime.timedelta(hours=2)).timestamp()),
     )
 
     return travel_times_to_pubs.T + travel_times_from_pubs
 
 
-def calculate_pub_travel_times(spoons: List[Spoons], attendees: List[Attendee]):
+def calculate_pub_travel_times(
+    spoons: List[Spoons], attendees: List[Attendee], meeting_time: datetime
+):
     """
     For a given set of pubs and attendees, return the travel time statistics
     for each pub and attendee, in order of pub
@@ -160,6 +171,7 @@ def calculate_pub_travel_times(spoons: List[Spoons], attendees: List[Attendee]):
                 [pub.coord_string() for pub in pubs_chunk],
                 [attendee.end_point for attendee in attendees_group],
                 travel_mode,
+                meeting_time,
             )
             attendee_group_travel_times.append(travel_times)
         pub_chunk_travel_times.append(np.hstack(attendee_group_travel_times))
@@ -168,12 +180,25 @@ def calculate_pub_travel_times(spoons: List[Spoons], attendees: List[Attendee]):
 
 @app.post("/calculate_optimal_spoons")
 def calculate_optimal_spoons(request: OptiSpoonsRequest):
-    pubs = request_spoons_data(SearchRegion.ENGLAND, SearchType.ALL_VENUES, "London")
+    pubs = request_spoons_data(request.search_region, SearchType.ALL_VENUES, request.search_subregion)
 
-    pub_travel_times = calculate_pub_travel_times(pubs.items, request.attendees)
+    pub_travel_times = calculate_pub_travel_times(
+        pubs.items, request.attendees, request.meeting_datetime
+    )
     pub_scores = (pub_travel_times ** 2).sum(axis=1)
 
-    return pubs.items[pub_scores.argmin()]
+    result_pubs = [
+        Spoons(**pub.dict() | dict(score=score))
+        for pub, score in zip(pubs.items, pub_scores)
+    ]
+    result_pubs = sorted(result_pubs, key=lambda pub: pub.score)
+
+    return OptiSpoonsResponse(
+        search_region=request.search_region,
+        meeting_time=request.meeting_datetime,
+        optimal_spoons=result_pubs[0],
+        pub_scores=result_pubs,
+    )
 
 
 @app.get("/get_spoons_in_subregion")

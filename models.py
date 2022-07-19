@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, validator
 
@@ -20,6 +20,7 @@ class SearchRegion(str, Enum):
     ENGLAND = "England"
     WALES = "Wales"
     NORTHERN_IRELAND = "N Ireland"
+    IRELAND = "Republic of Ireland"
 
 
 class GmapsMatrixElementData(BaseModel):
@@ -71,6 +72,7 @@ class Spoons(BaseModel):
     county: str
     postcode: str
     name: str
+    score: Optional[float]
 
     def coord_string(self) -> str:
         return f"{self.lat:.6f},{self.lng:.6f}"

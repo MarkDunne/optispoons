@@ -1,0 +1,59 @@
+### Basic optimal spoons request
+
+POST http://127.0.0.1:8000/calculate_optimal_spoons
+accept: application/json
+Content-Type: application/json
+
+{
+  "attendees": [
+    {
+      "name": "Lizz",
+      "start_point": "London SW1A 1AA",
+      "end_point": "London SW1A 1AA"
+    },
+    {
+      "name": "Lord Beckenham",
+      "start_point": "Beckenham Hill Rd, Beckenham BR3 1SY",
+      "end_point": "Beckenham Hill Rd, Beckenham BR3 1SY",
+      "travel_mode": "bicycling"
+    },
+    {
+      "name": "Lord Sutton",
+      "start_point": "High St, Sutton SM1 1JA",
+      "end_point": "High St, Sutton SM1 1JA",
+      "travel_mode": "transit"
+    }
+  ]
+}
+
+### Optimal spoons request with some options
+
+POST http://127.0.0.1:8000/calculate_optimal_spoons
+accept: application/json
+Content-Type: application/json
+
+{
+  "attendees": [
+    {
+      "name": "Lizz",
+      "start_point": "London SW1A 1AA",
+      "end_point": "London SW1A 1AA"
+    },
+    {
+      "name": "Lord Beckenham",
+      "start_point": "Beckenham Hill Rd, Beckenham BR3 1SY",
+      "end_point": "Beckenham Hill Rd, Beckenham BR3 1SY",
+      "travel_mode": "bicycling"
+    },
+    {
+      "name": "Lord Sutton",
+      "start_point": "High St, Sutton SM1 1JA",
+      "end_point": "High St, Sutton SM1 1JA",
+      "travel_mode": "transit"
+    }
+  ],
+  "search_region": "Wales",
+  "search_subregion": "Cardiff",
+  "meeting_datetime": "2022-07-30T19:00:00"
+}
+

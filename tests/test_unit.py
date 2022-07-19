@@ -1,4 +1,4 @@
-from main import gmaps_matrix, solve, group_attendees_by_travel_mode
+from main import gmaps_matrix, group_attendees_by_travel_mode, calculate_pub_travel_times, get_next_meeting_time
 from models import Spoons, Attendee, TravelMode
 
 attendees = [
@@ -67,7 +67,7 @@ def test_solve():
         ),
     ]
 
-    result = solve(spoons, attendees)
+    result = calculate_pub_travel_times(spoons, attendees, get_next_meeting_time())
 
     assert result.shape == (len(spoons), len(attendees))
 
