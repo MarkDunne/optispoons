@@ -4,6 +4,24 @@ from typing import List
 from pydantic import BaseModel, validator
 
 
+class SearchType(str, Enum):
+    ALL_VENUES = "all_venues", 0
+    PUBS_ONLY = "pubs_only", 1
+    HOTELS_ONLY = "hotels_only", 2
+
+    def __new__(cls, label, query_value):
+        obj = str.__new__(cls)
+        obj._value_ = label
+        obj.query_value = query_value
+        return obj
+
+
+class SearchRegion(str, Enum):
+    ENGLAND = "England"
+    WALES = "Wales"
+    NORTHERN_IRELAND = "N Ireland"
+
+
 class GmapsMatrixElementData(BaseModel):
     text: str
     value: int

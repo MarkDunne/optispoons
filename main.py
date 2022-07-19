@@ -1,53 +1,40 @@
 import datetime
 from datetime import datetime as datetime_type
-from enum import Enum
-from itertools import groupby, product
-from operator import xor, itemgetter
-import numpy as np
-from typing import List, Iterator
+from itertools import groupby
+from typing import List
 
 import diskcache
+import numpy as np
 import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, BaseSettings, Field
+from starlette.responses import RedirectResponse
+
+from models import (
+    GmapsMatrixResponse,
+    Attendee,
+    SpoonsSubRegion,
+    Spoons,
+    SearchRegion,
+    SearchType,
+)
+
 
 # TODO use an LRU cache here
 #  See https://fastapi.tiangolo.com/advanced/settings/
-from models import GmapsMatrixResponse, Attendee, SpoonsSubRegion, Spoons, TravelMode
-
-
 class Settings(BaseSettings):
-    gmaps_api_key: str = Field(description="some desc")
+    gmaps_api_key: str = Field(description="Google Maps API Key")
 
     class Config:
-        secrets_dir = "/var/run/"
+        env_file = ".env"
 
 
 settings = Settings()
-print(settings)
 
 app = FastAPI()
 cache = diskcache.Cache(".cache")
 
 ONE_DAY_SECONDS = 24 * 60 * 60
-
-
-class SearchType(str, Enum):
-    ALL_VENUES = "all_venues", 0
-    PUBS_ONLY = "pubs_only", 1
-    HOTELS_ONLY = "hotels_only", 2
-
-    def __new__(cls, label, query_value):
-        obj = str.__new__(cls)
-        obj._value_ = label
-        obj.query_value = query_value
-        return obj
-
-
-class SearchRegion(str, Enum):
-    ENGLAND = "England"
-    WALES = "Wales"
-    NORTHERN_IRELAND = "N Ireland"
 
 
 @cache.memoize(expire=ONE_DAY_SECONDS)
@@ -81,7 +68,7 @@ def chunks(l, n):
         yield l[i : i + n]
 
 
-# @cache.memoize(expire=ONE_DAY_SECONDS)
+@cache.memoize(expire=ONE_DAY_SECONDS)
 def gmaps_matrix(origins=None, destinations=None, travel_mode="transit", **kwargs):
     """
     Return travel times to each destination for each origin
@@ -119,6 +106,7 @@ def get_next_meeting_time():
     )
 
 
+# Todo add region option to this
 class OptiSpoonsRequest(BaseModel):
     attendees: List[Attendee]
     datetime: datetime_type = get_next_meeting_time()
@@ -130,7 +118,14 @@ def group_attendees_by_travel_mode(attendees):
     return [(mode, list(attendees)) for (mode, attendees) in iterable_result]
 
 
-def round_trip_travel_time(start_points, mid_points, end_points, travel_mode):
+def round_trip_travel_times_for_travel_mode(
+    start_points, mid_points, end_points, travel_mode
+):
+    """
+    Return results by midpoint
+    """
+    assert len(start_points) == len(end_points)
+
     travel_times_to_pubs = gmaps_matrix(
         origins=start_points,
         destinations=mid_points,
@@ -150,20 +145,17 @@ def round_trip_travel_time(start_points, mid_points, end_points, travel_mode):
     return travel_times_to_pubs.T + travel_times_from_pubs
 
 
-def solve(spoons: List[Spoons], attendees: List[Attendee]):
+def calculate_pub_travel_times(spoons: List[Spoons], attendees: List[Attendee]):
     """
     For a given set of pubs and attendees, return the travel time statistics
     for each pub and attendee, in order of pub
     """
-
-    # Todo can I do a product of pubs vs attendees groups?
-
     attendee_groups = group_attendees_by_travel_mode(attendees)
     pub_chunk_travel_times = []
     for pubs_chunk in chunks(spoons, 20):
         attendee_group_travel_times = []
         for travel_mode, attendees_group in attendee_groups:
-            travel_times = round_trip_travel_time(
+            travel_times = round_trip_travel_times_for_travel_mode(
                 [attendee.start_point for attendee in attendees_group],
                 [pub.coord_string() for pub in pubs_chunk],
                 [attendee.end_point for attendee in attendees_group],
@@ -178,8 +170,8 @@ def solve(spoons: List[Spoons], attendees: List[Attendee]):
 def calculate_optimal_spoons(request: OptiSpoonsRequest):
     pubs = request_spoons_data(SearchRegion.ENGLAND, SearchType.ALL_VENUES, "London")
 
-    solution = solve(pubs.items, request.attendees)
-    pub_scores = (solution**2).sum(axis=1)
+    pub_travel_times = calculate_pub_travel_times(pubs.items, request.attendees)
+    pub_scores = (pub_travel_times ** 2).sum(axis=1)
 
     return pubs.items[pub_scores.argmin()]
 
@@ -193,6 +185,11 @@ async def get_spoons_in_subregion(
     return request_spoons_data(
         search_region.value, search_type.query_value, search_subregion
     )
+
+
+@app.get("/")
+async def root():
+    return RedirectResponse("/docs")
 
 
 if __name__ == "__main__":
