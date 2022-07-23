@@ -9,14 +9,15 @@ import requests
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, BaseSettings, Field
 from starlette.responses import RedirectResponse
+from loguru import logger
 
-from models import (
-    GmapsMatrixResponse,
+from app.models import (
     Attendee,
-    SpoonsSubRegion,
-    Spoons,
+    GmapsMatrixResponse,
     SearchRegion,
     SearchType,
+    Spoons,
+    SpoonsSubRegion,
 )
 
 
@@ -41,6 +42,9 @@ ONE_DAY_SECONDS = 24 * 60 * 60
 def request_spoons_data(
     search_region, search_type, search_subregion
 ) -> SpoonsSubRegion:
+    logger.info(
+        f"Requesting spoons regional data - Search type:{search_type}, Location:{search_subregion}, {search_region}"
+    )
     response = requests.post(
         "https://www.jdwetherspoon.com/api/advancedsearch",
         headers={
@@ -84,6 +88,7 @@ def gmaps_matrix(origins=None, destinations=None, travel_mode="transit", **kwarg
     }
 
     url = base_url + "?" + "&".join(f"{key}={value}" for key, value in params.items())
+    logger.info(f"Requesting gmaps api")
     response = requests.get(url)
     response.raise_for_status()
 
@@ -98,7 +103,6 @@ def gmaps_matrix(origins=None, destinations=None, travel_mode="transit", **kwarg
 
 
 def get_next_meeting_time() -> datetime_type:
-    # Todo parameterize default day and time
     days = 0 - datetime.datetime.today().weekday() + 7
     return datetime.datetime.combine(
         (datetime.datetime.today() + datetime.timedelta(days=days)).date(),
@@ -106,7 +110,6 @@ def get_next_meeting_time() -> datetime_type:
     )
 
 
-# Todo add region option to this
 class OptiSpoonsRequest(BaseModel):
     attendees: List[Attendee]
     search_region: SearchRegion = SearchRegion.ENGLAND
@@ -180,7 +183,11 @@ def calculate_pub_travel_times(
 
 @app.post("/calculate_optimal_spoons")
 def calculate_optimal_spoons(request: OptiSpoonsRequest):
-    pubs = request_spoons_data(request.search_region, SearchType.ALL_VENUES, request.search_subregion)
+    logger.info(f"Received request {request}")
+
+    pubs = request_spoons_data(
+        request.search_region, SearchType.ALL_VENUES, request.search_subregion
+    )
 
     pub_travel_times = calculate_pub_travel_times(
         pubs.items, request.attendees, request.meeting_datetime

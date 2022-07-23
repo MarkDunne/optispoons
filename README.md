@@ -2,8 +2,10 @@
 
 ## Todo
 
-- [ ] Restructure the code into an app directory
-- [ ] Deploy
+- [x] Restructure the code into an app directory
+- [x] Deploy
+- [ ] Get fly.io working
+- [x] Make sure that tests work with new structure
 
 
 ## Run book
@@ -25,4 +27,9 @@ There is also a
 ```bash
 git update-index --assume-unchanged [<file> ...]
 git update-index --no-assume-unchanged [<file> ...]
+```
+
+**To deploy a new version**
+```bash
+flyctl deploy
 ```

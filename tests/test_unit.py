@@ -1,5 +1,5 @@
-from main import gmaps_matrix, group_attendees_by_travel_mode, calculate_pub_travel_times, get_next_meeting_time
-from models import Spoons, Attendee, TravelMode
+from app.main import gmaps_matrix, group_attendees_by_travel_mode, calculate_pub_travel_times, get_next_meeting_time
+from app.models import Spoons, Attendee, TravelMode
 
 attendees = [
     Attendee(
