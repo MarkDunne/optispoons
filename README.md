@@ -4,8 +4,9 @@
 
 - [x] Restructure the code into an app directory
 - [x] Deploy
-- [ ] Get fly.io working
+- [x] Get fly.io working
 - [x] Make sure that tests work with new structure
+- [x] ci/cd
 
 
 ## Run book
